@@ -8,7 +8,7 @@ using namespace std;
 
 float error=0;
 double eq=0;
-double xA,xB,yA,yB,target_angle;
+double xA,xB,yA,yB,target_angle,error_angle;
 float navigation_current_heading=0;
 
 double angle (double xA,double xB,double yA,double yB)  //angle between two points
@@ -63,7 +63,7 @@ double angle (double xA,double xB,double yA,double yB)  //angle between two poin
             result=90;
         }
     }
-    cout<<result<<endl;
+    //cout<<result<<endl;
     return result;
 }
 
@@ -177,6 +177,15 @@ double FindDistanceToSegment(double x1, double y1, double x2, double y2, double 
         distance = FindDistanceToSegment(lineX1, lineY1, lineX2, lineY2, pointX, pointY);       //calling function to find the shortest distance
         cout<<"Distance = "<<distance <<endl;
 
+        target_angle=angle(lineX1,lineX2,lineY1,lineY2);
+        error_angle = Error(target_angle);
+        cout << "Target Angle "<<target_angle <<endl;
+        cout << "Error Angle "<<error_angle <<endl;
+        
+        
+        
+        
+        
         return 0;
     }
 
