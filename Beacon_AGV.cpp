@@ -11,26 +11,30 @@ using namespace std;
 float error=0;
 double eq=0;
 double xA,xB,yA,yB,target_angle,error_angle;
-float navigation_current_heading=0;
+double navigation_current_heading=5;
 double threshold_line = 1;  //  limit within which line condition is considered to be valid
-double Threshold = 5;       //  Permissible angular threshold
+double Threshold = 1;       //  Permissible angular threshold
 int target_reached = 0;     //Flag set to check if AGV reached final target
-double delta_angle=0;    // AGV steering angle
 double Kp = 1;           //Constant parameter for relating error angle with delta angle
 double lin_vel=0.5;       //linear velocity of AGV
 
-double steering_current_heading =0;    //Parameters for steering angle
-double Threshold_steering=0;
+//double steering_angle =0;    //Parameters for steering angle
+
+double steering =0;
+double Threshold_steering=1;
+double delta_angle=0;    // AGV steering angle
 
 int current_x=0;               // X and Y parameters
 int current_y=0;
 int next_x=0;
 int next_y=0;
-int x_limit=10;
-int y_limit=10;
+int x_limit=1;
+int y_limit=1;
 
 double current_position=0;
 double position=0;
+bool node_not_reached = true;
+bool temp = false;
 
 double angle (double xA,double xB,double yA,double yB)  //angle between two points
 {
@@ -139,9 +143,8 @@ double pointPosition(double x1,double y1,double x2,double y2,double x3,double y3
     else
     {
         cout <<"Below the line";
-        current_position =2;
+        current_position =-1;
     }
-
     return current_position;
 
 }
@@ -194,6 +197,21 @@ void drive(float linear,float angular)  //Will add once switch to ROS
 }
 
 
+double delta_angle_calculator(double error_angle,double Kp)
+{
+    double result;
+
+    if(abs(result) > Threshold_steering)
+    {
+        result = error_angle * Kp;
+    }
+    else
+    {
+        result = 0;
+    }
+    return result;
+}
+
 
 
 int main()
@@ -209,92 +227,84 @@ int main()
     pointX = 2;            //pointX, pointY are the point of the reference point.
     pointY = 0;
 
-    Kp=pointPosition(lineX1, lineY1, lineX2, lineY2, pointX, pointY);
-    /*  if (Kp == 0)                   //To find where exactly the point is now reference to line and set Kp accordingly to control delta angle
-      {
-          cout << "On the line";
-          Kp=0;
-      }
-      else if (Kp == 1)
-      {
-          cout <<"Above the line";
-          Kp=1;
-      }
-      else
-      {
-          cout <<"Below the line";
-          Kp=-1;
-      }
-     */
 
-    distance = FindDistanceToSegment(lineX1, lineY1, lineX2, lineY2, pointX, pointY);       //calling function to find the shortest distance
-    cout<<"Distance = "<<distance <<endl;
-
-    target_angle=angle(lineX1,lineX2,lineY1,lineY2);
-    error_angle = Error(target_angle);
-
-    cout << "Target Angle "<<target_angle <<endl;
-    cout << "Error Angle "<<error_angle <<endl;
 
 
     while(1)
     {
         if(target_reached != 1)   //Not used as of now
         {
-            while((abs(next_x-current_x) > x_limit)  ||  (abs(next_y-current_y) > y_limit))    //Condition to check if the robot reached within the boundary of target
+            //while((abs(next_x-current_x) > x_limit)  ||  (abs(next_y-current_y) > y_limit))    //Condition to check if the robot reached within the boundary of target
+
+            node_not_reached = ((abs(lineX2-pointX) > x_limit)  ||  (abs(lineY2-pointY) > y_limit));
+            target_angle=angle(lineX1,lineX2,lineY1,lineY2);
+            error_angle = Error(target_angle);
+
+            Kp=pointPosition(lineX1, lineY1, lineX2, lineY2, pointX, pointY);
+            delta_angle = delta_angle_calculator(error_angle,Kp) ;      // Experimenting by relating error angle from IMU to delta angle for AGV control
+
+
+            cout << "Target Angle "<<target_angle <<endl;
+            cout << "Error Angle "<<error_angle <<endl;
+            cout << (node_not_reached) << endl;
+
+          //  cout<< "Check point3"<<endl;
+
+            //This is a one time process,should not be repeated again unless or until the particular motion execution is not completed
+            while (abs(steering - delta_angle) > Threshold_steering)    //Initial steering motion
+            {
+                drive(0,delta_angle);
+           // cout<< "Check point2"<<endl;
+            cout<<abs(steering - delta_angle)<<endl;
+
+                //CALL SUBSCRIBER FOR UPDATING steering_current_heading
+            }
+            //cout<< "Check point"<<endl;
+            while (((navigation_current_heading - target_angle) > Threshold) && (!node_not_reached))  // First Curve
+            {
+             //CHANGE TO node_not_reached later
+                drive(lin_vel,0);
+                cout << "Dummy"<<endl;
+                //CALL SUBSCRIBER FOR UPDATING navigation_current_heading
+            }
+            drive(0,0);                                                 //Stop
+            usleep(2000000);
+
+            delta_angle = delta_angle* -1 ;   //Experimenting with delta angle of same magnitude and opp direction for aligning trajectory with line
+            while (abs(steering- delta_angle) > Threshold_steering)    //Steering angle change for countering first curve
             {
 
-                error_angle = Error(target_angle);
-                delta_angle = error_angle * Kp ;      // Experimenting by relating error angle from IMU to delta angle for AGV control
-                //This is a one time process,should not be repeated again unless or until the particular motion execution is not completed
-                while (abs(steering_current_heading - delta_angle) > Threshold_steering)    //Initial steering motion
-                {
-                    drive(0,delta_angle);
-                    //CALL SUBSCRIBER FOR UPDATING steering_current_heading
-                }
-                while ((navigation_current_heading - target_angle) > Threshold)   // First Curve
-                {
-                    drive(lin_vel,0);
-                    //CALL SUBSCRIBER FOR UPDATING navigation_current_heading
-                }
-                drive(0,0);                                                 //Stop
-                usleep(2000000);
-
-                delta_angle = delta_angle* -1 ;   //Experimenting with delta angle of same magnitude and opp direction for aligning trajectory with line
-                while (abs(steering_current_heading - delta_angle) > Threshold_steering)    //Steering angle change for countering first curve
-                {
-
-                    drive(0,delta_angle);
-                    //CALL SUBSCRIBER FOR UPDATING steering_current_heading
-                }
-
-                while ((distance < threshold_line) && ((navigation_current_heading - target_angle) > Threshold))  //Condition to check if the robot trajectory met the straight line
-                {
-                    distance = FindDistanceToSegment(lineX1, lineY1, lineX2, lineY2, pointX, pointY);
-                    //calling function to find the shortest distance
-                    //Update pointX and pointY with beacon's output X and Y
-                    //Update lineX1,lineY1 ,lineX2,lineY2 with the intermediate node points
-                    drive(lin_vel,0);
-                    //CALL SUBSCRIBER FOR UPDATING navigation_current_heading
-                }
-
-                while (abs(steering_current_heading - 0) > Threshold_steering)    //Steering angle change for Original position
-                {
-
-                    drive(0,0);
-                    //CALL SUBSCRIBER FOR UPDATING steering_current_heading
-                }
-
-                while ((distance < threshold_line) && ((navigation_current_heading - target_angle) > Threshold))
-                    //Even while moving straight make sure you are not deviating too much out of the Trajectory
-                {
-                    distance = FindDistanceToSegment(lineX1, lineY1, lineX2, lineY2, pointX, pointY);
-                    drive(lin_vel,0);
-                    //CALL SUBSCRIBER FOR UPDATING navigation_current_heading
-                }
+                drive(0,delta_angle);
+                //CALL SUBSCRIBER FOR UPDATING steering_current_heading
             }
 
+            while ((distance < threshold_line) && ((navigation_current_heading - target_angle) > Threshold))  //Condition to check if the robot trajectory met the straight line
+            {
+                distance = FindDistanceToSegment(lineX1, lineY1, lineX2, lineY2, pointX, pointY);
+                //calling function to find the shortest distance
+                //Update pointX and pointY with beacon's output X and Y
+                //Update lineX1,lineY1 ,lineX2,lineY2 with the intermediate node points
+                drive(lin_vel,0);
+                //CALL SUBSCRIBER FOR UPDATING navigation_current_heading
+            }
+
+            while (abs(steering - 0) > Threshold_steering)    //Steering angle change for Original position
+            {
+
+                drive(0,0);
+                //CALL SUBSCRIBER FOR UPDATING steering_current_heading
+            }
+
+            while ((distance < threshold_line) && ((navigation_current_heading - target_angle) > Threshold))
+                //Even while moving straight make sure you are not deviating too much out of the Trajectory
+            {
+                distance = FindDistanceToSegment(lineX1, lineY1, lineX2, lineY2, pointX, pointY);
+                drive(lin_vel,0);
+                //CALL SUBSCRIBER FOR UPDATING navigation_current_heading
+            }
         }
+
+
     }
     return 0;
 }
